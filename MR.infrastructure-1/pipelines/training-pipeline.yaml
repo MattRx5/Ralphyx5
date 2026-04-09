@@ -1,0 +1,58 @@
+trigger:
+  none
+
+pool:
+  name: Azure Pipelines
+  vmImage: windows-latest
+
+stages:
+- stage: Build
+  displayName: Build
+  dependsOn: []
+  jobs:
+  - job: Build
+    steps:
+
+    - task: CopyFiles@2
+      inputs:
+        SourceFolder: $(Build.SourcesDirectory)/bicep
+        Contents: '**'
+        TargetFolder: $(Build.ArtifactStagingDirectory)/drop
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: $(Build.ArtifactStagingDirectory)/drop
+        ArtifactName: drop
+        publishLocation: Container
+
+- stage: DeployStage
+  displayName: Deploy Storage and Vnet
+  dependsOn: [Build]
+  condition: succeeded('Build')
+  jobs:
+    - job:
+      steps:
+
+      - task: DownloadBuildArtifacts@0
+        displayName: Download Parameter Artifacts
+        inputs:
+          buildType: 'current'
+          downloadType: 'single'
+          artifactName: drop
+          downloadPath: $(System.DefaultWorkingDirectory)          
+
+      - task: AzureCLI@2
+        displayName: Deploy Bicep file
+        inputs:
+          azureSubscription: 'mr-training-sp'
+          scriptType: 'ps'
+          scriptLocation: 'inlineScript'
+          inlineScript: |          
+            az account set -s b892519c-1331-4cc2-887f-9d39f4eae93f
+
+            # Deploying Bicep File
+            az deployment sub create `
+              --name "MyFirstDeployment" `
+              --location uksouth `
+              --template-file $(System.DefaultWorkingDirectory)/drop/main.bicep `
+              --parameters azureLocation=uksouth
